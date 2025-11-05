@@ -1,51 +1,32 @@
 import tkinter as tk
-from tkinter import messagebox
-import pyperclip
-from core.time_converter import TimeConverter
+from core.plugin_manager import PluginManager
 
-
-class TimestampToolGUI:
+class MainUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("时间戳转换工具")
-        self.root.geometry("400x280")
-        self.root.resizable(False, False)
+        self.root.title("多功能工具箱（插件版）")
+        self.root.geometry("450x320")
 
-        tk.Label(root, text="请输入时间戳或时间：", font=("微软雅黑", 11)).pack(pady=10)
-        self.input_entry = tk.Entry(root, width=40, font=("Consolas", 11))
+        tk.Label(root, text="选择功能模块：", font=("微软雅黑", 11)).pack(pady=5)
+        self.plugin_var = tk.StringVar()
+        self.plugin_var.set(PluginManager.list_plugins()[0])
+
+        tk.OptionMenu(root, self.plugin_var, *PluginManager.list_plugins()).pack()
+
+        tk.Label(root, text="输入内容：", font=("微软雅黑", 11)).pack(pady=5)
+        self.input_entry = tk.Entry(root, width=45, font=("Consolas", 11))
         self.input_entry.pack()
 
-        frame = tk.Frame(root)
-        frame.pack(pady=10)
-        tk.Button(frame, text="时间戳 → 时间", command=self.convert_ts_to_time, width=15).grid(row=0, column=0, padx=5)
-        tk.Button(frame, text="时间 → 时间戳", command=self.convert_time_to_ts, width=15).grid(row=0, column=1, padx=5)
+        tk.Button(root, text="执行", command=self.run_plugin, width=15).pack(pady=10)
 
-        tk.Label(root, text="转换结果：", font=("微软雅黑", 11)).pack(pady=10)
-        self.output_label = tk.Label(root, text="", font=("Consolas", 12), fg="blue")
-        self.output_label.pack()
+        tk.Label(root, text="输出结果：", font=("微软雅黑", 11)).pack(pady=5)
+        self.output_text = tk.Text(root, height=6, width=50, font=("Consolas", 10))
+        self.output_text.pack()
 
-        tk.Button(root, text="复制结果", command=self.copy_result, width=15).pack(pady=10)
-
-    def convert_ts_to_time(self):
-        val = self.input_entry.get()
-        try:
-            result = TimeConverter.timestamp_to_time(val)
-            self.output_label.config(text=result)
-        except ValueError as e:
-            messagebox.showerror("错误", str(e))
-
-    def convert_time_to_ts(self):
-        val = self.input_entry.get()
-        try:
-            result = TimeConverter.time_to_timestamp(val)
-            self.output_label.config(text=result)
-        except ValueError as e:
-            messagebox.showerror("错误", str(e))
-
-    def copy_result(self):
-        text = self.output_label.cget("text")
-        if text:
-            pyperclip.copy(text)
-            messagebox.showinfo("提示", "结果已复制")
-        else:
-            messagebox.showwarning("提示", "没有结果可复制")
+    def run_plugin(self):
+        plugin_name = self.plugin_var.get()
+        plugin = PluginManager.get_plugin(plugin_name)
+        value = self.input_entry.get()
+        result = plugin.run(value)
+        self.output_text.delete("1.0", tk.END)
+        self.output_text.insert(tk.END, result)
