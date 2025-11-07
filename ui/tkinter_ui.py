@@ -2,63 +2,175 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter.scrolledtext import ScrolledText
 from core.plugin_manager import PluginManager
+from PIL import Image, ImageDraw
+import threading
+import pystray
+from ttkbootstrap.icons import Icon
 
+
+from ttkbootstrap.constants import *
+from tkinter import *
 
 class MainUI:
     def __init__(self, root):
+        # ✅ 初始化窗口（注意：不要覆盖 root）
         self.root = root
-        self.root.title("🎧 FAE 多功能工具箱 Pro")
         self.root.geometry("900x560")
-        self.root.resizable(False, False)
+        self.root.overrideredirect(True)  # 隐藏系统标题栏
+        self.root.resizable(True, True)
+        self.style = ttk.Style(theme="superhero")
 
+        # ================== 自定义标题栏 ==================
+        self.create_titlebar()
         # 启用暗色主题
-        style = ttk.Style(theme="superhero")
-        title_font = ("微软雅黑", 12, "bold")
-        text_font = ("Consolas", 10)
+        self.title_font = ("微软雅黑", 12, "bold")
+        self.text_font = ("Consolas", 10)
 
-        # 主容器分为左右两区
-        self.main_pane = ttk.Panedwindow(root, orient=HORIZONTAL)
+
+        # ================== 主体布局 ==================
+        self.main_pane = ttk.Panedwindow(self.root, orient=HORIZONTAL)
         self.main_pane.pack(fill="both", expand=True)
 
-        # ================== 左侧导航栏 ==================
-        nav_frame = ttk.Frame(self.main_pane, width=180, bootstyle="dark")
-        nav_frame.pack_propagate(False)
-        ttk.Label(nav_frame, text="FAE 工具箱", font=("微软雅黑", 14, "bold"), bootstyle="inverse-dark").pack(pady=20)
+        self.create_nav_frame()
+        self.create_content_frame()
 
-        nav_buttons = [
-            ("工具模块", "wrench", self.show_main_panel),
-            ("设置", "gear", self.show_settings),
-            ("关于", "info-circle", self.show_about),
-        ]
-        for name, icon, cmd in nav_buttons:
-            btn = ttk.Button(
-                nav_frame,
-                text=f"  {name}",
-                image="",
-                compound="left",
-                bootstyle="secondary-outline",
-                command=cmd,
-                width=15
-            )
-            btn.pack(pady=8, ipadx=4, ipady=4)
-
-        self.main_pane.add(nav_frame)
-
-        # ================== 右侧主工作区 ==================
-        self.content_frame = ttk.Frame(self.main_pane, padding=20)
-        self.main_pane.add(self.content_frame, weight=3)
-
-        self.create_main_panel(title_font, text_font)
+        # ================== 状态栏 ==================
         self.status_var = ttk.StringVar(value="准备就绪 ✅")
-
-        # 状态栏
         status_bar = ttk.Label(
-            root, textvariable=self.status_var, anchor="w", bootstyle="inverse-secondary"
+            self.root, textvariable=self.status_var,
+            anchor="w", bootstyle="inverse-secondary"
         )
         status_bar.pack(side="bottom", fill="x")
 
+    # ------------------ 自定义标题栏 ------------------
+    def create_titlebar(self):
+        titlebar = ttk.Frame(self.root, bootstyle="dark")
+        titlebar.pack(fill="x")
+
+        ttk.Label(
+            titlebar, text="🎧 FAE 工具箱",
+            anchor="w", padding=10,
+            font=("微软雅黑", 12, "bold")
+        ).pack(side="left")
+
+        ttk.Button(
+            titlebar, text="—",
+            command=self.minimize,
+            bootstyle="secondary-outline"
+        ).pack(side="right", padx=5, pady=3)
+
+        ttk.Button(
+            titlebar, text="✖",
+            command=self.root.destroy,
+            bootstyle="danger-outline"
+        ).pack(side="right", padx=5, pady=3)
+
+        # 支持拖动窗口
+        titlebar.bind("<Button-1>", self.click_window)
+        titlebar.bind("<B1-Motion>", self.drag_window)
+
+    def click_window(self, event):
+        self._x = event.x
+        self._y = event.y
+
+    def drag_window(self, event):
+        x = event.x_root - self._x
+        y = event.y_root - self._y
+        self.root.geometry(f"+{x}+{y}")
+
+    def minimize(self):
+        try:
+            self.root.withdraw()  # 模拟最小化
+            threading.Thread(target=self.create_tray_icon, daemon=True).start()
+        except Exception as e:
+            print("Minimize failed:", e)
+
+
+
+    # ========== 创建系统托盘 ==========
+    def create_tray_icon(self):
+        # 创建一个简单的托盘图标
+        image = Image.new("RGB", (64, 64), color=(40, 40, 40))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((10, 10, 54, 54), fill=(255, 0, 80))
+
+        menu = pystray.Menu(
+            pystray.MenuItem("显示窗口", self.show_window),
+            pystray.MenuItem("退出程序", self.exit_app)
+        )
+
+        self.icon = pystray.Icon("fae_toolbox", image, "FAE 工具箱", menu)
+        self.icon.run()
+
+
+    # ========== 从托盘恢复 ==========
+    def show_window(self, icon=None, item=None):
+        if self.icon:
+            self.icon.stop()
+        self.root.deiconify()
+        self.root.lift()
+
+    # ========== 退出程序 ==========
+    def exit_app(self, icon=None, item=None):
+        if self.icon:
+            self.icon.stop()
+        self.root.destroy()
+
+
+    # ------------------ 左侧导航栏 ------------------
+    def create_nav_frame(self):
+        nav_frame = ttk.Frame(self.main_pane, width=180, bootstyle="dark")
+        nav_frame.pack_propagate(False)
+
+        ttk.Label(
+            nav_frame, text="FAE 工具箱",
+            font=("微软雅黑", 14, "bold"),
+            bootstyle="inverse-dark"
+        ).pack(pady=20)
+
+        nav_groups = {
+            "常用工具": [
+                ("时间戳转换", "clock", self.show_timestamp),
+                ("版本获取", "layers", self.show_version),
+                ("解栈", "file-binary", self.show_stack),
+            ],
+            "辅助工具": [
+                ("reset info转换", "shuffle", self.show_reset),
+                ("问题模板", "file-text", self.show_template),
+            ],
+            "系统": [
+                ("设置", "gear", self.show_settings),
+                ("关于", "info-circle", self.show_about),
+            ]
+        }
+
+        for group, buttons in nav_groups.items():
+            ttk.Label(
+                nav_frame, text=group,
+                font=("微软雅黑", 10, "bold"),
+                bootstyle="inverse-dark"
+            ).pack(pady=(10, 2))
+            for name, icon, cmd in buttons:
+                ttk.Button(
+                    nav_frame,
+                    text=f"  {name}",
+                    compound="left",
+                    bootstyle="secondary-outline",
+                    command=cmd,
+                    width=15
+                ).pack(pady=8, ipadx=4, ipady=4)
+
+        self.main_pane.add(nav_frame)
+
+    # ------------------ 主内容区 ------------------
+    def create_content_frame(self):
+        self.content_frame = ttk.Frame(self.main_pane, padding=20)
+        self.main_pane.add(self.content_frame, weight=3)
+        self.show_timestamp(self.title_font ,self.text_font)
+
+
     # ========== 主面板（插件执行区） ==========
-    def create_main_panel(self, title_font, text_font):
+    def show_timestamp(self, title_font, text_font):
         frame = self.content_frame
         for widget in frame.winfo_children():
             widget.destroy()
@@ -109,8 +221,54 @@ class MainUI:
             justify="center",
         ).pack(pady=20)
 
-    def show_main_panel(self):
-        self.create_main_panel(("微软雅黑", 12, "bold"), ("Consolas", 10))
+    def show_version(self):
+        frame = self.content_frame
+        for widget in frame.winfo_children():
+            widget.destroy()
+        ttk.Label(frame, text="📘 关于本程序", font=("微软雅黑", 14, "bold")).pack(pady=30)
+        ttk.Label(
+            frame,
+            text="FAE 多功能工具箱 v1.0\n\nDesigned by 松焕彭\n支持插件扩展 / 栈解码 / 时间戳 / 日志分析",
+            bootstyle="secondary",
+            justify="center",
+        ).pack(pady=20)
+
+    def show_stack(self):
+        frame = self.content_frame
+        for widget in frame.winfo_children():
+            widget.destroy()
+        ttk.Label(frame, text="📘 关于本程序", font=("微软雅黑", 14, "bold")).pack(pady=30)
+        ttk.Label(
+            frame,
+            text="FAE 多功能工具箱 v1.0\n\nDesigned by 松焕彭\n支持插件扩展 / 栈解码 / 时间戳 / 日志分析",
+            bootstyle="secondary",
+            justify="center",
+        ).pack(pady=20)
+
+
+    def show_reset(self):
+        frame = self.content_frame
+        for widget in frame.winfo_children():
+            widget.destroy()
+        ttk.Label(frame, text="📘 关于本程序", font=("微软雅黑", 14, "bold")).pack(pady=30)
+        ttk.Label(
+            frame,
+            text="FAE 多功能工具箱 v1.0\n\nDesigned by 松焕彭\n支持插件扩展 / 栈解码 / 时间戳 / 日志分析",
+            bootstyle="secondary",
+            justify="center",
+        ).pack(pady=20)
+
+    def show_template(self):
+        frame = self.content_frame
+        for widget in frame.winfo_children():
+            widget.destroy()
+        ttk.Label(frame, text="📘 关于本程序", font=("微软雅黑", 14, "bold")).pack(pady=30)
+        ttk.Label(
+            frame,
+            text="FAE 多功能工具箱 v1.0\n\nDesigned by 松焕彭\n支持插件扩展 / 栈解码 / 时间戳 / 日志分析",
+            bootstyle="secondary",
+            justify="center",
+        ).pack(pady=20)
 
     # ========== 插件执行逻辑 ==========
     def run_plugin(self):
