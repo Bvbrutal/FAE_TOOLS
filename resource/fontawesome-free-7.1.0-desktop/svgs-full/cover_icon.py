@@ -2,8 +2,8 @@ import os
 import cairosvg
 
 # --- 配置 ---
-SVG_DIR = "brands/"  # 放 SVG 文件的目录
-PNG_DIR = "brands_png/"  # 输出 PNG 的目录
+SVG_DIR = "regular/"  # 放 SVG 文件的目录
+PNG_DIR = "regular_png/"  # 输出 PNG 的目录
 WIDTH = 32  # PNG 宽度
 HEIGHT = 32  # PNG 高度
 COLOR = None  # 可选：将 SVG 填充色替换为 COLOR，如 "red"，否则保持原色
@@ -17,7 +17,7 @@ def convert_svg_to_png(svg_dir, png_dir, width=32, height=32, color=None):
     for file_name in os.listdir(svg_dir):
         if file_name.lower().endswith(".svg"):
             svg_path = os.path.join(svg_dir, file_name)
-            png_name = os.path.splitext(file_name)[0] + ".solid_png"
+            png_name = os.path.splitext(file_name)[0] + ".png"
             png_path = os.path.join(png_dir, png_name)
 
             with open(svg_path, "r", encoding="utf-8") as f:

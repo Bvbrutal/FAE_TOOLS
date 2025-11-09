@@ -19,7 +19,7 @@ import pystray
 # ========================
 from core.plugin_manager import PluginManager
 import win32gui, win32con, win32api, win32gui_struct
-
+import ctypes
 
 class MainUI:
     version = "1.0"
@@ -28,9 +28,14 @@ class MainUI:
         # ================= 1. 保存根窗口 =================
         # 注意不要覆盖 root，否则 ttkbootstrap.Window 会丢失
         self.root = root
-        self.root.geometry("900x560")  # 设置窗口初始大小
-        self.root.overrideredirect(True)  # 隐藏系统标题栏
+        self.root.geometry("900x600")  # 设置窗口初始大小
+        self.root.overrideredirect(False)  # 隐藏系统标题栏
         self.root.resizable(True, True)  # 允许用户调整窗口大小
+        root.title("FAE 工具箱")
+
+        # ================= 设置窗口图标 =================
+        icon = tk.PhotoImage(file="resource/png/pumpkin.png")  # png 或 ico
+        self.root.iconphoto(True, icon)
 
         # ================= 2. 样式 =================
         self.style = ttk.Style(theme="superhero")  # 启用暗色主题
@@ -40,7 +45,7 @@ class MainUI:
         self._titlebar_images = []
 
         # ================= 4. 自定义标题栏 =================
-        self.create_titlebar()  # 左标题 + 右按钮 + 拖动逻辑
+        # self.create_titlebar()  # 左标题 + 右按钮 + 拖动逻辑
 
         # ================= 5. 字体设置 =================
         self.title_font = ("微软雅黑", 12, "bold")  # 标题字体
@@ -68,7 +73,7 @@ class MainUI:
         status_bar.pack(side="bottom", fill="x")
 
         # ================= 8. 居中显示 =================
-        self.center_window(900, 560)  # 窗口初始化时居中
+        self.center_window(900, 600)  # 窗口初始化时居中
 
         # ================= 9. 创建托盘 ================
         threading.Thread(target=self._create_tray, daemon=True).start()
@@ -98,16 +103,16 @@ class MainUI:
             padding=(10, 5),
             font=("微软雅黑", 12, "bold")
         )
-        title_label.pack(side="left", fill="x",padx=10)
+        title_label.pack(side="left", fill="x",padx=4, pady=4)
 
 
         # 右侧按钮容器
         btn_frame = ttk.Frame(titlebar)
-        btn_frame.pack(side="right", padx=5)
+        btn_frame.pack(side="right", padx=4, pady=4)
 
         # 按钮图标
-        minimize_img = tk.PhotoImage(file="resource/fontawesome-free-7.1.0-desktop/svgs-full/solid_png/minus.png")
-        close_img = tk.PhotoImage(file="resource/fontawesome-free-7.1.0-desktop/svgs-full/solid_png/xmark.png")
+        minimize_img = tk.PhotoImage(file="resource/fontawesome-free-7.1.0-desktop/svgs-full/solid_png/minus.png").subsample(2, 2)
+        close_img = tk.PhotoImage(file="resource/fontawesome-free-7.1.0-desktop/svgs-full/solid_png/xmark.png").subsample(2, 2)
 
         # 保存引用防止回收
         self._titlebar_images.extend([minimize_img, close_img])
@@ -125,10 +130,17 @@ class MainUI:
                 image=btn_info["image"],
                 command=btn_info["command"],
                 bootstyle=btn_info["bootstyle"],
-                width=25,  # 调整宽度
+                width=10,  # 调整宽度
                 padding=2  # 减小内边距
             )
             btn.pack(side="right", padx=2, pady=2)
+
+        # 拖动窗口
+        titlebar.bind("<Button-1>", self.click_window)
+        titlebar.bind("<B1-Motion>", self.drag_window)
+        title_label.bind("<Button-1>", self.click_window)
+        title_label.bind("<B1-Motion>", self.drag_window)
+
 
     def click_window(self, event):
         self._x = event.x
@@ -275,36 +287,90 @@ class MainUI:
 
 
     # ========== 主面板（插件执行区） ==========
-    def show_timestamp(self, title_font, text_font):
+    def show_timestamp(self, title_font=None, text_font=None):
+        if title_font is None:
+            title_font = self.title_font
+        if text_font is None:
+            text_font = self.text_font
+
+        # 清空内容区域
         frame = self.content_frame
         for widget in frame.winfo_children():
             widget.destroy()
 
-        ttk.Label(frame, text="🎯 功能选择", font=title_font).pack(anchor="w", pady=(0, 5))
-        plugins = PluginManager.list_plugins()
-        self.plugin_var = ttk.StringVar(value=plugins[0] if plugins else "")
-        self.plugin_menu = ttk.Combobox(
-            frame,
-            textvariable=self.plugin_var,
-            values=plugins,
-            width=45,
-            bootstyle="info",
-        )
-        self.plugin_menu.pack(anchor="w", pady=5)
+        # 标题
+        ttk.Label(frame, text="🕒 时间戳转换工具", font=title_font).pack(anchor="w", pady=(0, 10))
 
-        ttk.Label(frame, text="📝 输入内容", font=title_font).pack(anchor="w", pady=(20, 5))
-        self.input_entry = ttk.Entry(frame, width=80, font=text_font)
-        self.input_entry.pack(pady=5)
+        # 父容器：一行左右两列
+        input_frame = ttk.Frame(frame)
+        input_frame.pack(anchor="w", pady=5, fill="x")
+
+        # 左侧输入框列
+        left_frame = ttk.Frame(input_frame)
+        left_frame.pack(side="left", anchor="n")  # 左列靠左，顶部对齐
+        ttk.Label(left_frame, text="请输入时间 (格式: YYYY-MM-DD HH:MM:SS 或时间戳):", font=text_font).pack(anchor="w")
+        self.input_entry = ttk.Entry(left_frame, width=40, font=text_font)
+        self.input_entry.pack(anchor="w", pady=5)
+
+        # 右侧时区列
+        right_frame = ttk.Frame(input_frame)
+        right_frame.pack(side="left", padx=20, anchor="n")  # 左列右边间距20
+        ttk.Label(right_frame, text="选择时区:", font=text_font).pack(anchor="w")
+        tz_list = ["Asia/Shanghai", "UTC", "Asia/Tokyo", "America/New_York", "Europe/London"]
+        self.tz_var = ttk.StringVar(value="Asia/Shanghai")
+        self.tz_menu = ttk.Combobox(
+            right_frame,
+            textvariable=self.tz_var,
+            values=tz_list,
+            width=25,
+            bootstyle="info",
+            state="readonly"
+        )
+        self.tz_menu.pack(anchor="w", pady=5)
+
+        # 输出框
+        ttk.Label(frame, text="结果:", font=text_font).pack(anchor="w", pady=(15, 5))
+        self.output_text = ScrolledText(frame, font=text_font, height=6, wrap="word", relief="flat", bd=5)
+        self.output_text.pack(fill="both", expand=True, pady=5)
+
+        # 按钮函数
+        def calc_timestamp():
+            input_value = self.input_entry.get().strip()
+            tz_name = self.tz_var.get()
+            from core.time_converter import TimeConverter  # 假设插件文件名
+            converter = TimeConverter()
+            try:
+                result = converter.run(input_value, tz=tz_name)
+            except Exception as e:
+                result = f"计算出错: {e}"
+            self.output_text.config(state="normal")
+            self.output_text.delete("1.0", "end")
+            self.output_text.insert("end", result)
+            self.output_text.config(state="disabled")
+            self.status_var.set("计算完成 ✅")
+            frame.after(3000, lambda: self.status_var.set("准备就绪 ✅"))
 
         # 按钮行
         btn_frame = ttk.Frame(frame)
-        btn_frame.pack(pady=15)
-        ttk.Button(btn_frame, text="执行", bootstyle="danger", width=15, command=self.run_plugin).pack(side="left", padx=10)
-        ttk.Button(btn_frame, text="清空输出", bootstyle="secondary-outline", width=15, command=self.clear_output).pack(side="left", padx=10)
+        btn_frame.pack(pady=10)
+        ttk.Button(btn_frame, text="计算时间戳", bootstyle="primary", width=20, command=calc_timestamp).pack(
+            side="left", padx=10)
 
-        ttk.Label(frame, text="📤 输出结果", font=title_font).pack(anchor="w", pady=(20, 5))
-        self.output_text = ScrolledText(frame, font=text_font, height=12, wrap="word", relief="flat", bd=5)
-        self.output_text.pack(fill="both", expand=True, pady=5)
+        def copy_to_clipboard():
+            result = self.output_text.get("1.0", "end").strip()
+            if result:
+                frame.clipboard_clear()
+                frame.clipboard_append(result)
+                frame.update()
+                self.status_var.set("结果已复制到剪贴板 ✅")
+            else:
+                self.status_var.set("输出为空，无法复制 ⚠️")
+
+        # 按钮行增加复制按钮
+        ttk.Button(btn_frame, text="复制结果", bootstyle="success-outline", width=15,
+                   command=copy_to_clipboard).pack(side="left", padx=10)
+        self.output_text.config(state="disabled")
+
 
     # ========== 其他页面 ==========
     def show_settings(self):
