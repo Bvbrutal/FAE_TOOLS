@@ -1,73 +1,134 @@
+# ========================
+# ✅ 标准库导入（放最前）
+# ========================
+import threading
+import tkinter as tk
+from tkinter.scrolledtext import ScrolledText
+
+# ========================
+# ✅ 第三方库导入
+# ========================
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from tkinter.scrolledtext import ScrolledText
-from core.plugin_manager import PluginManager
-from PIL import Image, ImageDraw
-import threading
-import pystray
 from ttkbootstrap.icons import Icon
+from PIL import Image as PILImage, ImageDraw
+import pystray
 
+# ========================
+# ✅ 项目内模块导入
+# ========================
+from core.plugin_manager import PluginManager
+import win32gui, win32con, win32api, win32gui_struct
 
-from ttkbootstrap.constants import *
-from tkinter import *
 
 class MainUI:
+    version = "1.0"
+
     def __init__(self, root):
-        # ✅ 初始化窗口（注意：不要覆盖 root）
+        # ================= 1. 保存根窗口 =================
+        # 注意不要覆盖 root，否则 ttkbootstrap.Window 会丢失
         self.root = root
-        self.root.geometry("900x560")
+        self.root.geometry("900x560")  # 设置窗口初始大小
         self.root.overrideredirect(True)  # 隐藏系统标题栏
-        self.root.resizable(True, True)
-        self.style = ttk.Style(theme="superhero")
+        self.root.resizable(True, True)  # 允许用户调整窗口大小
 
-        # ================== 自定义标题栏 ==================
-        self.create_titlebar()
-        # 启用暗色主题
-        self.title_font = ("微软雅黑", 12, "bold")
-        self.text_font = ("Consolas", 10)
+        # ================= 2. 样式 =================
+        self.style = ttk.Style(theme="superhero")  # 启用暗色主题
 
+        # ================= 3. 保存图标引用 =================
+        # 用于标题栏按钮，防止 PhotoImage 被垃圾回收
+        self._titlebar_images = []
 
-        # ================== 主体布局 ==================
+        # ================= 4. 自定义标题栏 =================
+        self.create_titlebar()  # 左标题 + 右按钮 + 拖动逻辑
+
+        # ================= 5. 字体设置 =================
+        self.title_font = ("微软雅黑", 12, "bold")  # 标题字体
+        self.text_font = ("Consolas", 10)  # 正文字体
+
+        # ================= 6. 主体布局 =================
+        # 主容器分左右两部分
         self.main_pane = ttk.Panedwindow(self.root, orient=HORIZONTAL)
         self.main_pane.pack(fill="both", expand=True)
 
+        # 左侧导航栏
         self.create_nav_frame()
+
+        # 右侧主内容区
         self.create_content_frame()
 
-        # ================== 状态栏 ==================
+        # ================= 7. 状态栏 =================
         self.status_var = ttk.StringVar(value="准备就绪 ✅")
         status_bar = ttk.Label(
-            self.root, textvariable=self.status_var,
-            anchor="w", bootstyle="inverse-secondary"
+            self.root,
+            textvariable=self.status_var,
+            anchor="w",
+            bootstyle="inverse-secondary"
         )
         status_bar.pack(side="bottom", fill="x")
 
+        # ================= 8. 居中显示 =================
+        self.center_window(900, 560)  # 窗口初始化时居中
+
+        # ================= 9. 创建托盘 ================
+        threading.Thread(target=self._create_tray, daemon=True).start()
+
+
+
+    # ------------------ 居中 ------------------
+    def center_window(self, width=900, height=560):
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 2
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+
     # ------------------ 自定义标题栏 ------------------
+
     def create_titlebar(self):
+        # 标题栏
         titlebar = ttk.Frame(self.root, bootstyle="dark")
         titlebar.pack(fill="x")
 
-        ttk.Label(
-            titlebar, text="🎧 FAE 工具箱",
-            anchor="w", padding=10,
+        # 左侧标题文字
+        title_label = ttk.Label(
+            titlebar,
+            text="🎧 FAE 工具箱",
+            anchor="w",        # 左对齐
+            padding=(10, 5),
             font=("微软雅黑", 12, "bold")
-        ).pack(side="left")
+        )
+        title_label.pack(side="left", fill="x",padx=10)
 
-        ttk.Button(
-            titlebar, text="—",
-            command=self.minimize,
-            bootstyle="secondary-outline"
-        ).pack(side="right", padx=5, pady=3)
 
-        ttk.Button(
-            titlebar, text="✖",
-            command=self.root.destroy,
-            bootstyle="danger-outline"
-        ).pack(side="right", padx=5, pady=3)
+        # 右侧按钮容器
+        btn_frame = ttk.Frame(titlebar)
+        btn_frame.pack(side="right", padx=5)
 
-        # 支持拖动窗口
-        titlebar.bind("<Button-1>", self.click_window)
-        titlebar.bind("<B1-Motion>", self.drag_window)
+        # 按钮图标
+        minimize_img = tk.PhotoImage(file="resource/fontawesome-free-7.1.0-desktop/svgs-full/solid_png/minus.png")
+        close_img = tk.PhotoImage(file="resource/fontawesome-free-7.1.0-desktop/svgs-full/solid_png/xmark.png")
+
+        # 保存引用防止回收
+        self._titlebar_images.extend([minimize_img, close_img])
+
+        # 按钮配置
+        buttons = [
+            {"image": minimize_img, "command": self.minimize, "bootstyle": "secondary-outline"},
+            {"image": close_img, "command": self.root.destroy, "bootstyle": "danger-outline"}
+        ]
+
+        # 调整按钮大小 (width, height) 并水平居中
+        for btn_info in reversed(buttons):
+            btn = ttk.Button(
+                btn_frame,
+                image=btn_info["image"],
+                command=btn_info["command"],
+                bootstyle=btn_info["bootstyle"],
+                width=25,  # 调整宽度
+                padding=2  # 减小内边距
+            )
+            btn.pack(side="right", padx=2, pady=2)
 
     def click_window(self, event):
         self._x = event.x
@@ -81,40 +142,84 @@ class MainUI:
     def minimize(self):
         try:
             self.root.withdraw()  # 模拟最小化
-            threading.Thread(target=self.create_tray_icon, daemon=True).start()
         except Exception as e:
             print("Minimize failed:", e)
 
 
 
-    # ========== 创建系统托盘 ==========
-    def create_tray_icon(self):
-        # 创建一个简单的托盘图标
-        image = Image.new("RGB", (64, 64), color=(40, 40, 40))
-        draw = ImageDraw.Draw(image)
-        draw.rectangle((10, 10, 54, 54), fill=(255, 0, 80))
+    # ------------------ Windows 托盘 ------------------
+    def _create_tray(self):
+        message_map = {
+            win32con.WM_DESTROY: self._destroy_window,
+            win32con.WM_USER + 20: self._tray_notify
+        }
+        wc = win32gui.WNDCLASS()
+        wc.lpfnWndProc = message_map
+        wc.lpszClassName = "FAE_Toolbox"
+        classAtom = win32gui.RegisterClass(wc)
+        self.hwnd = win32gui.CreateWindow(classAtom, "FAE", 0, 0, 0, 0, 0, 0, 0, 0, None)
+        hicon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)
 
-        menu = pystray.Menu(
-            pystray.MenuItem("显示窗口", self.show_window),
-            pystray.MenuItem("退出程序", self.exit_app)
+        flags = win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP
+        nid = (self.hwnd, 0, flags, win32con.WM_USER + 20, hicon, "FAE 多功能工具箱")
+        win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
+
+        # 消息循环
+        win32gui.PumpMessages()
+
+    def _tray_notify(self, hwnd, msg, wparam, lparam):
+        if lparam == win32con.WM_LBUTTONUP:
+            # 左键单击 → 显示窗口
+            self.show_window()
+        elif lparam == win32con.WM_RBUTTONUP:
+            # 右键弹出菜单
+            self._show_tray_menu()
+        return True
+
+    def _show_tray_menu(self):
+        menu = win32gui.CreatePopupMenu()
+        # 添加“显示窗口”菜单
+        win32gui.AppendMenu(menu, win32con.MF_STRING, 1, "显示窗口")
+        # 添加“退出程序”菜单
+        win32gui.AppendMenu(menu, win32con.MF_STRING, 2, "退出程序")
+
+        # 获取鼠标位置
+        pos = win32gui.GetCursorPos()
+        # 弹出菜单
+        win32gui.SetForegroundWindow(self.hwnd)
+        cmd = win32gui.TrackPopupMenu(
+            menu,
+            win32con.TPM_LEFTALIGN | win32con.TPM_BOTTOMALIGN | win32con.TPM_RETURNCMD,
+            pos[0],
+            pos[1],
+            0,
+            self.hwnd,
+            None
         )
 
-        self.icon = pystray.Icon("fae_toolbox", image, "FAE 工具箱", menu)
-        self.icon.run()
+        # 响应菜单选择
+        if cmd == 1:
+            self.show_window()
+        elif cmd == 2:
+            self.exit_app()
 
-
-    # ========== 从托盘恢复 ==========
     def show_window(self, icon=None, item=None):
-        if self.icon:
-            self.icon.stop()
         self.root.deiconify()
         self.root.lift()
+        self.center_window()
 
-    # ========== 退出程序 ==========
     def exit_app(self, icon=None, item=None):
-        if self.icon:
-            self.icon.stop()
+        self._destroy_window()
         self.root.destroy()
+
+    def _destroy_window(self, hwnd=None, msg=None, wparam=None, lparam=None):
+        # 删除托盘图标
+        nid = (hwnd, 0)
+        try:
+            win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)
+        except Exception:
+            pass
+            pass
 
 
     # ------------------ 左侧导航栏 ------------------
@@ -291,6 +396,4 @@ class MainUI:
 
 
 if __name__ == "__main__":
-    app = ttk.Window(themename="superhero")
-    MainUI(app)
-    app.mainloop()
+    MainUI.create_tray_icon(MainUI)
