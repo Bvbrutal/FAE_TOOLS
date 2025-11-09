@@ -502,7 +502,7 @@ class MainUI:
 
         # 输出框
         ttk.Label(frame, text="结果:", font=text_font).pack(anchor="w", pady=(15, 5))
-        self.output_text = ScrolledText(frame, font=text_font, height=12, wrap="word", state="disabled")
+        self.output_text = ScrolledText(frame, font=text_font, height=12, wrap="word")
         self.output_text.pack(fill="both", expand=True, pady=5)
 
         # 读取 txt 文件内容
@@ -517,7 +517,6 @@ class MainUI:
         self.output_text.config(state="normal")
         self.output_text.delete("1.0", "end")
         self.output_text.insert("end", content)
-        self.output_text.config(state="disabled")
 
 
 
