@@ -1,0 +1,17 @@
+{
+  "swm": {
+    "0x10100D9": "Card sync startup-file with the board and reset itself.",
+    "0x10100DA": "Service(syspkg_verify) report failure.",
+    "0x201012A": "Service(swm_trigger) report failure.",
+    "0x201012C": "Service sys boot report failure.",
+    "0x201014C": "Service sys verify dm verity report failure.",
+    "0x201013D": "The service start limit was defined and it was hit.",
+    "0x201013E": "A catch-all condition in case a system operation failed.",
+    "0x2010150": "Reboot to make cold patch take affect."
+  },
+  "nctl": {
+    "0x7020001": "NCTLD process exit, and reset the board.",
+    "0x7020002": "NCTLE process exit, and reset the board.",
+    "0x7020003": "NTPD process exit, and reset the board."
+  }
+}

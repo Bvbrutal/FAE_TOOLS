@@ -416,49 +416,109 @@ class MainUI:
             justify="center",
         ).pack(pady=20)
 
+    def show_reset(self, title_font=None, text_font=None):
+        if title_font is None:
+            title_font = self.title_font
+        if text_font is None:
+            text_font = self.text_font
 
-    def show_reset(self):
+        # 清空内容区域
         frame = self.content_frame
         for widget in frame.winfo_children():
             widget.destroy()
-        ttk.Label(frame, text="📘 关于本程序", font=("微软雅黑", 14, "bold")).pack(pady=30)
-        ttk.Label(
-            frame,
-            text="FAE 多功能工具箱 v1.0\n\nDesigned by 松焕彭\n支持插件扩展 / 栈解码 / 时间戳 / 日志分析",
-            bootstyle="secondary",
-            justify="center",
-        ).pack(pady=20)
 
-    def show_template(self):
-        frame = self.content_frame
-        for widget in frame.winfo_children():
-            widget.destroy()
-        ttk.Label(frame, text="📘 关于本程序", font=("微软雅黑", 14, "bold")).pack(pady=30)
-        ttk.Label(
-            frame,
-            text="FAE 多功能工具箱 v1.0\n\nDesigned by 松焕彭\n支持插件扩展 / 栈解码 / 时间戳 / 日志分析",
-            bootstyle="secondary",
-            justify="center",
-        ).pack(pady=20)
+        # 标题
+        ttk.Label(frame, text="🔧 ResetCode 转换工具", font=title_font).pack(anchor="w", pady=(0, 10))
 
-    # ========== 插件执行逻辑 ==========
-    def run_plugin(self):
-        plugin_name = self.plugin_var.get()
-        plugin = PluginManager.get_plugin(plugin_name)
-        value = self.input_entry.get()
-        try:
-            self.status_var.set(f"正在执行：{plugin_name} ...")
-            self.root.update_idletasks()
-            result = plugin.run(value)
+        # 输入框
+        ttk.Label(frame, text="请输入 reset-info:", font=text_font).pack(anchor="w")
+        self.input_entry = ttk.Entry(frame, width=80, font=text_font)  # 宽度约80字符
+        self.input_entry.pack(anchor="w", pady=5, fill="x")
+
+        # 输出框
+        ttk.Label(frame, text="结果:", font=text_font).pack(anchor="w", pady=(15, 5))
+        self.output_text = ScrolledText(frame, font=text_font, height=8, wrap="word", state="disabled")
+        self.output_text.pack(fill="both", expand=True, pady=5)
+
+        # 按钮函数
+        def calc_result():
+            ts_text = self.input_entry.get().strip()
+            if not ts_text:
+                self.status_var.set("输入为空 ⚠️")
+                self.output_text.after(3000, lambda: self.status_var.set("准备就绪 ✅"))
+                return
+            from core.covert_rebootcode_to_rebootinfo import ResetCodeConverter
+            resetcodeconverter = ResetCodeConverter()
+            ret = resetcodeconverter.run(ts_text, pri=False)
+            self.output_text.config(state="normal")
             self.output_text.delete("1.0", "end")
-            self.output_text.insert("end", result)
-            self.status_var.set("执行完成 ✅")
-        except Exception as e:
-            self.status_var.set(f"执行失败 ❌ {e}")
+            for t_str, msg in ret:
+                self.output_text.insert("end", f"{t_str}  {msg}\n")
+            self.output_text.config(state="disabled")
+            self.status_var.set("转换完成 ✅")
+            self.output_text.after(3000, lambda: self.status_var.set("准备就绪 ✅"))
 
-    def clear_output(self):
+        def copy_to_clipboard():
+            result = self.output_text.get("1.0", "end").strip()
+            if result:
+                frame.clipboard_clear()
+                frame.clipboard_append(result)
+                frame.update()
+                self.status_var.set("结果已复制到剪贴板 ✅")
+            else:
+                self.status_var.set("输出为空，无法复制 ⚠️")
+            self.output_text.after(3000, lambda: self.status_var.set("准备就绪 ✅"))
+
+        def clear_output():
+            self.output_text.config(state="normal")
+            self.output_text.delete("1.0", "end")
+            self.output_text.config(state="disabled")
+            self.status_var.set("已清空输出 ⚠️")
+            self.output_text.after(3000, lambda: self.status_var.set("准备就绪 ✅"))
+
+        # 按钮行
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(pady=10)
+        ttk.Button(btn_frame, text="转换", bootstyle="primary", width=20, command=calc_result).pack(side="left",
+                                                                                                    padx=10)
+        ttk.Button(btn_frame, text="清空输出", bootstyle="secondary-outline", width=15, command=clear_output).pack(
+            side="left", padx=10)
+        ttk.Button(btn_frame, text="复制结果", bootstyle="success-outline", width=15, command=copy_to_clipboard).pack(
+            side="left", padx=10)
+
+    def show_template(self, title_font=None, text_font=None):
+        if title_font is None:
+            title_font = self.title_font
+        if text_font is None:
+            text_font = self.text_font
+
+        # 清空内容区域
+        frame = self.content_frame
+        for widget in frame.winfo_children():
+            widget.destroy()
+
+        # 标题
+        ttk.Label(frame, text="🔧 问题模板", font=title_font).pack(anchor="w", pady=(0, 10))
+
+        # 输出框
+        ttk.Label(frame, text="结果:", font=text_font).pack(anchor="w", pady=(15, 5))
+        self.output_text = ScrolledText(frame, font=text_font, height=12, wrap="word", state="disabled")
+        self.output_text.pack(fill="both", expand=True, pady=5)
+
+        # 读取 txt 文件内容
+        txt_path = r"resource/issue_template.txt"  # 替换为你的路径
+        try:
+            with open(txt_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except Exception as e:
+            content = f"读取文件出错: {e}"
+
+        # 显示到输出框
+        self.output_text.config(state="normal")
         self.output_text.delete("1.0", "end")
-        self.status_var.set("输出已清空 ✅")
+        self.output_text.insert("end", content)
+        self.output_text.config(state="disabled")
+
 
 
 if __name__ == "__main__":
